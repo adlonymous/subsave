@@ -1,13 +1,25 @@
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, FlatList, RefreshControl } from 'react-native';
-import { Text, Title, Paragraph, FAB, Chip, Appbar, Avatar, List, Divider, Card } from 'react-native-paper';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, FlatList, RefreshControl, Alert, Modal, TouchableOpacity, Dimensions } from 'react-native';
+import { Text, Title, Paragraph, FAB, Chip, Appbar, Avatar, List, Divider, Card, IconButton, Portal } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Button } from '@/components';
+import { Button, GridAccountSetup, GradientCard, GradientButton } from '@/components';
 import { useTheme } from '@/utils/theme-context';
 import { useAuth } from '@/utils/auth-context';
 import { Vault, Subscription } from '@/types';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { isGridServiceHealthy } from '@/utils/grid-integration';
+import * as Clipboard from 'expo-clipboard';
+
+const { width } = Dimensions.get('window');
 
 // Mock data
+const mockVault = {
+  address: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+  balance: 2500.75,
+  currency: 'USD',
+  apy: 7.0,
+};
+
 const mockSubscriptions: Subscription[] = [
   {
     id: '1',
@@ -50,44 +62,71 @@ const mockSubscriptions: Subscription[] = [
   },
   {
     id: '4',
-    name: 'Microsoft 365',
-    description: 'Productivity suite',
-    amount: 6.99,
+    name: 'Gym Membership',
+    description: 'Fitness center access',
+    amount: 30.00,
     currency: 'USD',
     billingCycle: 'monthly',
-    nextBillingDate: '2024-02-25',
-    category: 'Productivity',
-    isActive: true,
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01',
+    nextBillingDate: '2024-03-01',
+    category: 'Fitness',
+    isActive: false,
+    createdAt: '2024-01-05',
+    updatedAt: '2024-01-20',
   },
   {
     id: '5',
-    name: 'Gym Membership',
-    description: 'Fitness center access',
-    amount: 29.99,
+    name: 'Amazon Prime',
+    description: 'Shipping, streaming, etc.',
+    amount: 14.99,
     currency: 'USD',
     billingCycle: 'monthly',
-    nextBillingDate: '2024-02-28',
-    category: 'Fitness',
-    isActive: false,
-    createdAt: '2024-01-01',
-    updatedAt: '2024-01-01',
+    nextBillingDate: '2024-02-25',
+    category: 'Shopping',
+    isActive: true,
+    createdAt: '2024-01-10',
+    updatedAt: '2024-01-10',
   },
 ];
 
 const mockData = {
-  totalMonthlyCost: 95.95, // Total of all active subscriptions
-  projectedYield: 7.0, // 7% APY as requested
-  monthlyEarnings: 6.72, // 7% of total monthly cost
-  netSavings: -89.23, // What you're actually paying (cost - earnings)
-  activeSubscriptions: 4,
-  pausedSubscriptions: 1,
+  totalVaultBalance: 2500.75,
+  totalMonthlyCost: mockSubscriptions
+    .filter(sub => sub.isActive && sub.billingCycle === 'monthly')
+    .reduce((sum, sub) => sum + sub.amount, 0),
+  projectedYield: 7.0,
+  monthlyEarnings: (2500.75 * (7.0 / 100)) / 12,
   nextCharges: [
     { service: 'Adobe Creative Cloud', date: '2024-02-10', amount: 52.99 },
     { service: 'Netflix', date: '2024-02-15', amount: 15.99 },
     { service: 'Spotify', date: '2024-02-20', amount: 9.99 },
+    { service: 'Amazon Prime', date: '2024-02-25', amount: 14.99 },
   ],
+  activeSubscriptions: mockSubscriptions.filter(sub => sub.isActive).length,
+  pausedSubscriptions: mockSubscriptions.filter(sub => !sub.isActive).length,
+  netSavings: 78.97 - ((2500.75 * (7.0 / 100)) / 12),
+};
+
+// Helper functions
+const getServiceIcon = (serviceName: string) => {
+  const lowerCaseName = serviceName.toLowerCase();
+  if (lowerCaseName.includes('netflix')) return 'netflix';
+  if (lowerCaseName.includes('spotify')) return 'spotify';
+  if (lowerCaseName.includes('adobe')) return 'palette';
+  if (lowerCaseName.includes('gym')) return 'dumbbell';
+  if (lowerCaseName.includes('amazon')) return 'shopping';
+  return 'credit-card-settings-outline';
+};
+
+const formatDate = (dateString: string) => {
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+  return new Date(dateString).toLocaleDateString(undefined, options);
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
 };
 
 export default function DashboardScreen() {
@@ -95,311 +134,587 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(mockSubscriptions);
   const [refreshing, setRefreshing] = useState(false);
-
+  const [showGridSetup, setShowGridSetup] = useState(false);
+  const [gridAccountReady, setGridAccountReady] = useState(false);
+  const [gridSetupChecked, setGridSetupChecked] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWalletAddress, setShowWalletAddress] = useState(false);
+  const [displayName, setDisplayName] = useState(user?.name || 'User');
+  const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // Simulate API call
     setTimeout(() => {
       setSubscriptions([...mockSubscriptions]);
       setRefreshing(false);
     }, 1000);
   }, []);
 
-  const getServiceIcon = (category: string) => {
-    switch (category.toLowerCase()) {
-      case 'entertainment':
-        return 'television';
-      case 'music':
-        return 'music';
-      case 'software':
-        return 'laptop';
-      case 'productivity':
-        return 'briefcase';
-      case 'fitness':
-        return 'dumbbell';
-      default:
-        return 'package-variant';
+  const handleGridSetupComplete = (success: boolean) => {
+    setShowGridSetup(false);
+    setGridAccountReady(success);
+    if (success) {
+      console.log('Grid account setup completed successfully');
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    });
+  const handleSetupGridAccount = () => {
+    setShowGridSetup(true);
   };
 
-  const renderSummaryCard = (title: string, value: string, subtitle: string, color?: string) => (
-    <View style={[styles.summaryCard, { backgroundColor: theme.colors.surface }]}>
-      <View style={styles.summaryCardContent}>
-        <Text style={[styles.summaryValue, { color: color || theme.colors.primary }]}>
-          {value}
-        </Text>
-        <Text style={[styles.summaryTitle, { color: theme.colors.onSurface }]}>{title}</Text>
-        <Text style={[styles.summarySubtitle, { color: theme.colors.onSurface }]}>{subtitle}</Text>
+  const handleDepositToVault = () => {
+    setShowDepositModal(true);
+  };
+
+  const handleDepositFromBank = () => {
+    setShowDepositModal(false);
+    Alert.alert(
+      'Bank Deposit',
+      'Bank account deposit feature coming soon!',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleDepositFromWallet = () => {
+    setShowDepositModal(false);
+    setShowWalletAddress(true);
+  };
+
+  const copyWalletAddress = async () => {
+    try {
+      await Clipboard.setStringAsync(mockVault.address);
+      Alert.alert('Copied!', 'Wallet address copied to clipboard');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to copy wallet address');
+    }
+  };
+
+  const handleSubscriptionPress = (subscription: Subscription) => {
+    setSelectedSubscription(subscription);
+    setShowCancelModal(true);
+  };
+
+  const handleCancelSubscription = () => {
+    if (selectedSubscription) {
+      Alert.alert(
+        'Cancel Subscription',
+        `Are you sure you want to cancel your ${selectedSubscription.name} subscription?`,
+        [
+          {
+            text: 'Keep Subscription',
+            style: 'cancel',
+          },
+          {
+            text: 'Cancel Subscription',
+            style: 'destructive',
+            onPress: () => {
+              // Update the subscription to inactive
+              setSubscriptions(prev => 
+                prev.map(sub => 
+                  sub.id === selectedSubscription.id 
+                    ? { ...sub, isActive: false, status: 'cancelled' }
+                    : sub
+                )
+              );
+              setShowCancelModal(false);
+              setSelectedSubscription(null);
+              Alert.alert('Success', 'Subscription cancelled successfully');
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  useEffect(() => {
+    const checkGridStatus = async () => {
+      try {
+        const isHealthy = await isGridServiceHealthy();
+        setGridAccountReady(isHealthy);
+      } catch (error) {
+        console.log('Grid service not available:', error);
+        setGridAccountReady(false);
+      } finally {
+        setGridSetupChecked(true);
+      }
+    };
+
+    checkGridStatus();
+  }, []);
+
+  // Update display name when user changes
+  useEffect(() => {
+    if (user?.name) {
+      setDisplayName(user.name);
+    }
+  }, [user?.name]);
+
+
+  const renderMetricCard = (title: string, value: string, subtitle: string, icon: string, color: string) => (
+    <View style={[styles.metricCard, { backgroundColor: theme.colors.surface }]}>
+      <View style={styles.metricHeader}>
+        <View style={[styles.metricIcon, { backgroundColor: color + '20' }]}>
+          <MaterialCommunityIcons name={icon} size={24} color={color} />
+        </View>
+        <Text style={[styles.metricTitle, { color: theme.colors.onSurfaceVariant }]}>{title}</Text>
       </View>
+      <Text style={[styles.metricValue, { color: theme.colors.onSurface }]}>{value}</Text>
+      <Text style={[styles.metricSubtitle, { color: theme.colors.onSurfaceVariant }]}>{subtitle}</Text>
     </View>
   );
 
-  const renderNextCharge = (charge: any, index: number) => (
-    <List.Item
-      key={index}
-      title={charge.service}
-      description={`${formatDate(charge.date)} • $${charge.amount.toFixed(2)}`}
-      left={(props) => <List.Icon {...props} icon="calendar-clock" />}
-      style={styles.nextChargeItem}
-    />
-  );
-
-  const renderSubscription = ({ item }: { item: Subscription }) => (
-    <Card 
-      style={styles.subscriptionCard}
-      onPress={() => router.push(`/vaultDetail?vaultId=1`)}
+  const renderSubscriptionCard = ({ item }: { item: Subscription }) => (
+    <TouchableOpacity 
+      style={[styles.subscriptionCard, { backgroundColor: theme.colors.surface }]}
+      onPress={() => handleSubscriptionPress(item)}
     >
-      <Card.Content>
-        <View style={styles.subscriptionHeader}>
-          <View style={styles.subscriptionInfo}>
-            <List.Icon icon={getServiceIcon(item.category)} size={24} />
-            <View style={styles.subscriptionDetails}>
-              <Title style={styles.subscriptionName}>{item.name}</Title>
-              <Paragraph style={styles.subscriptionDescription}>
-                {item.description}
-              </Paragraph>
-            </View>
-          </View>
-          <View style={styles.subscriptionAmount}>
-            <Text style={[styles.amount, { color: item.isActive ? theme.colors.error : theme.colors.outline }]}>
-              ${item.amount.toFixed(2)}
-            </Text>
-            <Text style={styles.billingCycle}>per {item.billingCycle}</Text>
-            {item.isActive && (
-              <Text style={styles.yieldText}>
-                +${(item.amount * 0.07).toFixed(2)} yield
-              </Text>
-            )}
-          </View>
-        </View>
-        
-        <View style={styles.subscriptionFooter}>
+      <View style={styles.subscriptionHeader}>
+        <Avatar.Icon
+          size={48}
+          icon={getServiceIcon(item.name)}
+          color={theme.colors.onSurface}
+          style={{ backgroundColor: theme.colors.surfaceVariant }}
+        />
+        <View style={styles.subscriptionInfo}>
+          <Text style={[styles.subscriptionName, { color: theme.colors.onSurface }]}>{item.name}</Text>
+          <Text style={[styles.subscriptionDescription, { color: theme.colors.onSurfaceVariant }]}>
+            {item.description}
+          </Text>
           <View style={styles.subscriptionMeta}>
-            <Text style={styles.nextCharge}>
+            <Text style={[styles.billingCycle, { color: theme.colors.onSurfaceVariant }]}>
+              {item.billingCycle}
+            </Text>
+            <Text style={[styles.nextBilling, { color: theme.colors.onSurfaceVariant }]}>
               Next: {formatDate(item.nextBillingDate)}
             </Text>
-            <Chip 
-              mode={item.isActive ? "contained" : "outlined"}
-              compact
-              style={[
-                styles.statusChip,
-                { 
-                  backgroundColor: item.isActive 
-                    ? theme.colors.primaryContainer 
-                    : 'transparent'
-                }
-              ]}
-            >
-              {item.isActive ? 'Active' : 'Paused'}
-            </Chip>
           </View>
         </View>
-      </Card.Content>
-    </Card>
+        <View style={styles.subscriptionAmount}>
+          <Text style={[styles.amount, { color: theme.colors.onSurface }]}>
+            {formatCurrency(item.amount)}
+          </Text>
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: item.isActive ? theme.colors.primaryContainer : theme.colors.surfaceVariant }
+          ]}>
+            <Text style={[
+              styles.statusText,
+              { color: item.isActive ? theme.colors.primary : theme.colors.onSurfaceVariant }
+            ]}>
+              {item.isActive ? 'Active' : 'Paused'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderNextCharge = (charge: any, index: number) => (
+    <View key={index} style={[styles.nextChargeItem, { backgroundColor: theme.colors.surface }]}>
+      <View style={styles.nextChargeInfo}>
+        <MaterialCommunityIcons 
+          name={getServiceIcon(charge.service)} 
+          size={20} 
+          color={theme.colors.primary} 
+        />
+        <View style={styles.nextChargeDetails}>
+          <Text style={[styles.nextChargeService, { color: theme.colors.onSurface }]}>
+            {charge.service}
+          </Text>
+          <Text style={[styles.nextChargeDate, { color: theme.colors.onSurfaceVariant }]}>
+            {formatDate(charge.date)}
+          </Text>
+        </View>
+      </View>
+      <Text style={[styles.nextChargeAmount, { color: theme.colors.primary }]}>
+        {formatCurrency(charge.amount)}
+      </Text>
+    </View>
   );
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
+      paddingTop: 20,
+      paddingBottom: 20,
+    },
+    header: {
+      paddingHorizontal: 20,
+      paddingTop: 60,
+      paddingBottom: 16,
+    },
+    headerTitle: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: theme.colors.onBackground,
+      marginBottom: 4,
+    },
+    headerSubtitle: {
+      fontSize: 16,
+      color: theme.colors.onSurfaceVariant,
     },
     scrollView: {
       flex: 1,
     },
-    summarySection: {
-      padding: 20,
-      gap: 20,
+    content: {
+      paddingHorizontal: 20,
+      paddingTop: 8,
     },
-    financialGrid: {
+    // Action Buttons
+    actionButtons: {
       flexDirection: 'row',
-      gap: 16,
+      gap: 12,
+      marginBottom: 24,
     },
-    summaryCard: {
+    actionButton: {
       flex: 1,
+      height: 56,
       borderRadius: 16,
-      borderWidth: 1,
-      borderColor: theme.colors.outline + '20',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
-    summaryCardContent: {
-      padding: 20,
-    },
-    summaryValue: {
-      fontSize: 32,
-      fontWeight: '800',
-      marginBottom: 8,
-      letterSpacing: -0.5,
-    },
-    summaryTitle: {
+    actionButtonText: {
       fontSize: 16,
-      marginBottom: 6,
-      fontWeight: '700',
-      letterSpacing: 0.2,
+      fontWeight: '600',
+      color: '#FFFFFF',
     },
-    summarySubtitle: {
-      fontSize: 13,
+    actionButtonSubtext: {
+      fontSize: 12,
+      color: '#FFFFFF',
       opacity: 0.8,
-      lineHeight: 18,
+      marginTop: 2,
     },
-    netCostCard: {
-      marginTop: 12,
-      borderRadius: 20,
-      borderWidth: 1,
+    // Metrics Grid
+    metricsGrid: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 24,
+    },
+    metricCard: {
+      flex: 1,
+      padding: 16,
+      borderRadius: 16,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    metricHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    metricIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8,
+    },
+    metricTitle: {
+      fontSize: 12,
+      fontWeight: '500',
+      flex: 1,
+    },
+    metricValue: {
+      fontSize: 24,
+      fontWeight: '800',
+      marginBottom: 4,
+    },
+    metricSubtitle: {
+      fontSize: 11,
+      opacity: 0.7,
+    },
+    // Yield Card
+    yieldCard: {
+      backgroundColor: theme.colors.surface,
       padding: 20,
+      borderRadius: 16,
+      marginBottom: 24,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
     },
-    netCostContent: {
+    yieldHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    yieldIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primaryContainer,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    yieldTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.onSurface,
+    },
+    yieldValue: {
+      fontSize: 32,
+      fontWeight: '900',
+      color: theme.colors.primary,
+      marginBottom: 4,
+    },
+    yieldSubtitle: {
+      fontSize: 14,
+      color: theme.colors.onSurfaceVariant,
+    },
+    // Section Headers
+    sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-    },
-    netCostLabel: {
-      fontSize: 16,
-      fontWeight: '600',
-      letterSpacing: 0.3,
-    },
-    netCostAmount: {
-      fontSize: 28,
-      fontWeight: '900',
-      marginTop: 6,
-      letterSpacing: -0.8,
-    },
-    netCostSubtext: {
-      fontSize: 13,
-      opacity: 0.9,
-      fontWeight: '500',
-    },
-    subscriptionsHeader: {
       marginBottom: 16,
-      paddingHorizontal: 4,
-    },
-    subscriptionsSubtitle: {
-      fontSize: 15,
-      opacity: 0.8,
-      marginTop: 6,
-      fontWeight: '500',
-    },
-    section: {
-      paddingHorizontal: 20,
-      marginBottom: 32,
     },
     sectionTitle: {
-      fontSize: 24,
-      fontWeight: '800',
-      marginBottom: 20,
+      fontSize: 20,
+      fontWeight: '700',
       color: theme.colors.onBackground,
-      letterSpacing: -0.5,
     },
+    sectionAction: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: theme.colors.primary,
+    },
+    // Next Charges
     nextChargesCard: {
-      marginTop: 12,
+      backgroundColor: theme.colors.surface,
       borderRadius: 16,
+      marginBottom: 24,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
     },
     nextChargeItem: {
-      paddingVertical: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.outlineVariant,
+    },
+    nextChargeInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    nextChargeDetails: {
+      marginLeft: 12,
+      flex: 1,
+    },
+    nextChargeService: {
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    nextChargeDate: {
+      fontSize: 12,
+    },
+    nextChargeAmount: {
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    // Subscriptions
+    subscriptionsList: {
+      marginBottom: 24,
     },
     subscriptionCard: {
-      marginBottom: 16,
-      borderRadius: 20,
+      padding: 16,
+      borderRadius: 16,
+      marginBottom: 12,
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
     },
     subscriptionHeader: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: 12,
+      alignItems: 'center',
     },
     subscriptionInfo: {
-      flexDirection: 'row',
-      alignItems: 'center',
       flex: 1,
-    },
-    subscriptionDetails: {
-      marginLeft: 16,
-      flex: 1,
+      marginLeft: 12,
     },
     subscriptionName: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: '700',
-      marginBottom: 6,
-      letterSpacing: -0.2,
+      marginBottom: 4,
     },
     subscriptionDescription: {
-      fontSize: 14,
-      opacity: 0.7,
-      lineHeight: 20,
-    },
-    subscriptionAmount: {
-      alignItems: 'flex-end',
-      minWidth: 100,
-    },
-    amount: {
-      fontSize: 22,
-      fontWeight: '800',
-      letterSpacing: -0.5,
-    },
-    billingCycle: {
-      fontSize: 13,
-      opacity: 0.6,
-      textTransform: 'capitalize',
-      fontWeight: '500',
-      marginTop: 2,
-    },
-    yieldText: {
       fontSize: 12,
-      color: theme.colors.primary,
-      fontWeight: '700',
-      marginTop: 4,
-      backgroundColor: theme.colors.primaryContainer,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 8,
-    },
-    subscriptionFooter: {
-      marginTop: 12,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.outline + '20',
+      marginBottom: 8,
     },
     subscriptionMeta: {
       flexDirection: 'row',
+      gap: 12,
+    },
+    billingCycle: {
+      fontSize: 11,
+      textTransform: 'capitalize',
+    },
+    nextBilling: {
+      fontSize: 11,
+    },
+    subscriptionAmount: {
+      alignItems: 'flex-end',
+    },
+    amount: {
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 8,
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    statusText: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    // Modals
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 24,
+    },
+    modalHeader: {
+      flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
+      marginBottom: 20,
     },
-    nextCharge: {
-      fontSize: 13,
-      opacity: 0.7,
-      fontWeight: '500',
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.colors.onSurface,
     },
-    statusChip: {
-      height: 28,
-      borderRadius: 14,
+    modalDescription: {
+      fontSize: 16,
+      color: theme.colors.onSurface,
+      marginBottom: 24,
+      lineHeight: 24,
+      textAlign: 'center',
     },
-    fab: {
-      position: 'absolute',
-      margin: 24,
-      right: 0,
-      bottom: 0,
+    modalActions: {
+      gap: 12,
+    },
+    modalButton: {
+      height: 48,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    walletAddressContainer: {
+      backgroundColor: theme.colors.surfaceVariant,
+      padding: 16,
+      borderRadius: 12,
+      marginBottom: 16,
+    },
+    walletAddress: {
+      fontSize: 12,
+      fontFamily: 'monospace',
+      color: theme.colors.primary,
+      marginBottom: 8,
+    },
+    copyButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    copyButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+      marginLeft: 8,
+    },
+    warningText: {
+      fontSize: 12,
+      color: theme.colors.error,
+      textAlign: 'center',
     },
   });
 
+  // Show Grid setup if needed
+  if (showGridSetup) {
+    return (
+      <View style={styles.container}>
+        <Appbar.Header>
+          <Appbar.BackAction onPress={() => setShowGridSetup(false)} />
+          <Appbar.Content title="Setup Payment Account" />
+        </Appbar.Header>
+        <GridAccountSetup onComplete={handleGridSetupComplete} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Appbar.Header>
-        <Appbar.Content 
-          title="Dashboard" 
-          titleStyle={{ fontSize: 24, fontWeight: '700', letterSpacing: -0.5 }}
-        />
-        <Appbar.Action 
-          icon="account-circle" 
-          onPress={() => router.push('/settings')}
-          iconColor={theme.colors.primary}
-        />
-      </Appbar.Header>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Dashboard</Text>
+        <Text style={styles.headerSubtitle}>Welcome back, {displayName}</Text>
+      </View>
+
+      {/* Grid Account Setup Prompt */}
+      {!gridSetupChecked ? (
+        <View style={styles.content}>
+          <Card style={{ padding: 16, backgroundColor: theme.colors.surfaceVariant }}>
+            <Text style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+              Checking Grid service...
+            </Text>
+          </Card>
+        </View>
+      ) : !gridAccountReady ? (
+        <View style={styles.content}>
+          <Card style={{ padding: 16, backgroundColor: theme.colors.primaryContainer }}>
+            <Text style={{ color: theme.colors.onPrimaryContainer, marginBottom: 12, fontWeight: '600' }}>
+              💳 Setup Payment Account
+            </Text>
+            <Text style={{ color: theme.colors.onPrimaryContainer, marginBottom: 16, fontSize: 14 }}>
+              Set up your Grid payment account to start managing subscriptions and payments.
+            </Text>
+            <Button 
+              mode="contained" 
+              onPress={handleSetupGridAccount}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              Setup Now
+            </Button>
+          </Card>
+        </View>
+      ) : null}
 
       <ScrollView 
         style={styles.scrollView}
@@ -407,79 +722,195 @@ export default function DashboardScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Financial Overview */}
-        <View style={styles.summarySection}>
-          <Title style={styles.sectionTitle}>Financial Overview</Title>
-          
-          {/* Main financial metrics */}
-          <View style={styles.financialGrid}>
-            {renderSummaryCard(
-              'Monthly Subscriptions',
-              `$${mockData.totalMonthlyCost.toFixed(2)}`,
-              `${mockData.activeSubscriptions} active, ${mockData.pausedSubscriptions} paused`,
-              theme.colors.error
-            )}
-            
-            {renderSummaryCard(
-              'Projected Yield',
-              `${mockData.projectedYield}% APY`,
-              `$${mockData.monthlyEarnings.toFixed(2)} earned this month`,
+        <View style={styles.content}>
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+              onPress={handleDepositToVault}
+            >
+              <Text style={styles.actionButtonText}>Add Funds</Text>
+              <Text style={styles.actionButtonSubtext}>Deposit to vault</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: theme.colors.secondary }]}
+              onPress={() => router.push('/add-subscription')}
+            >
+              <Text style={styles.actionButtonText}>Add Subscription</Text>
+              <Text style={styles.actionButtonSubtext}>Track new services</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Metrics Grid */}
+          <View style={styles.metricsGrid}>
+            {renderMetricCard(
+              'Balance',
+              formatCurrency(mockVault.balance),
+              'Vault balance',
+              'wallet',
               theme.colors.primary
             )}
+            {renderMetricCard(
+              'Monthly',
+              formatCurrency(mockData.totalMonthlyCost),
+              'Subscriptions',
+              'credit-card',
+              theme.colors.secondary
+            )}
           </View>
-          
-          {/* Net cost card */}
-          <View style={[styles.netCostCard, { backgroundColor: theme.colors.surfaceVariant, borderColor: theme.colors.outline + '20' }]}>
-            <View style={styles.netCostContent}>
-              <View>
-                <Text style={[styles.netCostLabel, { color: theme.colors.onSurfaceVariant }]}>
-                  What you're actually paying:
-                </Text>
-                <Text style={[styles.netCostAmount, { color: theme.colors.onSurfaceVariant }]}>
-                  ${Math.abs(mockData.netSavings).toFixed(2)}/month
-                </Text>
+
+          {/* Yield Card */}
+          <View style={styles.yieldCard}>
+            <View style={styles.yieldHeader}>
+              <View style={styles.yieldIcon}>
+                <MaterialCommunityIcons name="trending-up" size={24} color={theme.colors.primary} />
               </View>
-              <Text style={[styles.netCostSubtext, { color: theme.colors.onSurfaceVariant }]}>
-                After ${mockData.monthlyEarnings.toFixed(2)} yield
-              </Text>
+              <Text style={styles.yieldTitle}>Projected Monthly Yield</Text>
             </View>
+            <Text style={styles.yieldValue}>{formatCurrency(mockData.monthlyEarnings)}</Text>
+            <Text style={styles.yieldSubtitle}>From {mockVault.apy}% APY vault</Text>
           </View>
-        </View>
 
-        {/* Next Charges */}
-        <View style={styles.section}>
-          <Title style={styles.sectionTitle}>Next Charges</Title>
-          <Card style={styles.nextChargesCard}>
-            <Card.Content>
-              {mockData.nextCharges.map(renderNextCharge)}
-            </Card.Content>
-          </Card>
-        </View>
+          {/* Next Charges */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Next Charges</Text>
+            <TouchableOpacity>
+              <Text style={styles.sectionAction}>View All</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.nextChargesCard}>
+            {mockData.nextCharges.map(renderNextCharge)}
+          </View>
 
-        {/* Subscriptions List */}
-        <View style={styles.section}>
-          <View style={styles.subscriptionsHeader}>
-            <Title style={styles.sectionTitle}>Your Subscriptions</Title>
-            <Text style={styles.subscriptionsSubtitle}>
-              Total: ${mockData.totalMonthlyCost.toFixed(2)}/month
-            </Text>
+          {/* Subscriptions */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Subscriptions</Text>
+            <TouchableOpacity>
+              <Text style={styles.sectionAction}>Manage</Text>
+            </TouchableOpacity>
           </View>
           <FlatList
             data={subscriptions}
-            renderItem={renderSubscription}
+            renderItem={renderSubscriptionCard}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             scrollEnabled={false}
+            style={styles.subscriptionsList}
           />
         </View>
       </ScrollView>
 
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => router.push('/addSubscription')}
-        label="Add Subscription"
-      />
+      {/* Deposit Modal */}
+      <Portal>
+        <Modal
+          visible={showDepositModal}
+          onDismiss={() => setShowDepositModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Deposit to Vault</Text>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowDepositModal(false)}
+                />
+              </View>
+              <Text style={styles.modalDescription}>
+                Choose how you'd like to add funds to your vault
+              </Text>
+              <View style={styles.modalActions}>
+                <TouchableOpacity 
+                  style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={handleDepositFromBank}
+                >
+                  <Text style={styles.modalButtonText}>Bank Account</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.modalButton, { backgroundColor: theme.colors.secondary }]}
+                  onPress={handleDepositFromWallet}
+                >
+                  <Text style={styles.modalButtonText}>Wallet</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Wallet Address Modal */}
+      <Portal>
+        <Modal
+          visible={showWalletAddress}
+          onDismiss={() => setShowWalletAddress(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Deposit from Wallet</Text>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowWalletAddress(false)}
+                />
+              </View>
+              <Text style={styles.modalDescription}>
+                Send funds to this address
+              </Text>
+              <View style={styles.walletAddressContainer}>
+                <Text style={styles.walletAddress}>{mockVault.address}</Text>
+                <TouchableOpacity style={styles.copyButton} onPress={copyWalletAddress}>
+                  <MaterialCommunityIcons name="content-copy" size={16} color="#FFFFFF" />
+                  <Text style={styles.copyButtonText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.warningText}>
+                Only send USDC to this address. Other tokens may be lost.
+              </Text>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
+      {/* Cancel Subscription Modal */}
+      <Portal>
+        <Modal
+          visible={showCancelModal}
+          onDismiss={() => setShowCancelModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Cancel Subscription</Text>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowCancelModal(false)}
+                />
+              </View>
+              <Text style={styles.modalDescription}>
+                Are you sure you want to cancel this subscription? This action cannot be undone.
+              </Text>
+              <View style={styles.modalActions}>
+                <GradientButton
+                  title="Keep Subscription"
+                  onPress={() => setShowCancelModal(false)}
+                  variant="secondary"
+                  size="medium"
+                  style={styles.modalButton}
+                />
+                <GradientButton
+                  title="Cancel Subscription"
+                  onPress={handleCancelSubscription}
+                  variant="primary"
+                  size="medium"
+                  style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 }

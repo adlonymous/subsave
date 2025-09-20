@@ -1,17 +1,42 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Text, Title, Paragraph, List, Switch, Divider, IconButton } from 'react-native-paper';
-import { Card, Button } from '@/components';
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, Alert, Modal, TouchableOpacity } from 'react-native';
+import { Text, Title, Paragraph, List, Switch, Divider, IconButton, TextInput, Portal } from 'react-native-paper';
+import { Card, Button, GradientButton } from '@/components';
 import { useTheme } from '@/utils/theme-context';
 import { useAuth } from '@/utils/auth-context';
 import { router } from 'expo-router';
 
 export default function SettingsScreen() {
   const { theme, themeMode, setThemeMode, isDark } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, updateDisplayName } = useAuth();
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [displayName, setDisplayName] = useState(user?.name || 'User');
+  const [tempName, setTempName] = useState(user?.name || 'User');
 
   const handleThemeChange = (mode: 'light' | 'dark' | 'auto') => {
     setThemeMode(mode);
+  };
+
+  const handleEditName = () => {
+    setTempName(displayName);
+    setShowEditNameModal(true);
+  };
+
+  const handleSaveName = () => {
+    if (tempName.trim()) {
+      const newName = tempName.trim();
+      setDisplayName(newName);
+      updateDisplayName(newName);
+      setShowEditNameModal(false);
+      Alert.alert('Success', 'Name updated successfully!');
+    } else {
+      Alert.alert('Error', 'Please enter a valid name');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setTempName(displayName);
+    setShowEditNameModal(false);
   };
 
   const handleLogout = () => {
@@ -40,6 +65,8 @@ export default function SettingsScreen() {
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
+      paddingTop: 20,
+      paddingBottom: 20,
     },
     header: {
       padding: 24,
@@ -71,19 +98,75 @@ export default function SettingsScreen() {
       marginTop: 24,
     },
     userInfo: {
+      flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 24,
+      padding: 16,
     },
     avatar: {
-      marginBottom: 12,
+      marginRight: 16,
+    },
+    userDetails: {
+      flex: 1,
     },
     userName: {
       fontSize: 20,
       fontWeight: 'bold',
       marginBottom: 4,
+      color: theme.colors.onSurface,
     },
     userEmail: {
       opacity: 0.7,
+      marginBottom: 4,
+      color: theme.colors.onSurfaceVariant,
+    },
+    editHint: {
+      fontSize: 12,
+      color: theme.colors.primary,
+      fontStyle: 'italic',
+    },
+    editIcon: {
+      marginLeft: 8,
+    },
+    // Modal Styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    modalCard: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      padding: 24,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.colors.onSurface,
+    },
+    modalDescription: {
+      fontSize: 14,
+      color: theme.colors.onSurfaceVariant,
+      marginBottom: 20,
+    },
+    nameInput: {
+      marginBottom: 24,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    modalButton: {
+      flex: 1,
     },
   });
 
@@ -98,16 +181,25 @@ export default function SettingsScreen() {
 
       <ScrollView style={styles.content}>
         <Card style={styles.section}>
-          <View style={styles.userInfo}>
+          <TouchableOpacity onPress={handleEditName} style={styles.userInfo}>
             <IconButton
               icon="account-circle"
               size={64}
               iconColor={theme.colors.primary}
               style={styles.avatar}
             />
-            <Text style={styles.userName}>{user?.name || 'User'}</Text>
-            <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
-          </View>
+            <View style={styles.userDetails}>
+              <Text style={styles.userName}>{displayName}</Text>
+              <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
+              <Text style={styles.editHint}>Tap to edit name</Text>
+            </View>
+            <IconButton
+              icon="pencil"
+              size={20}
+              iconColor={theme.colors.primary}
+              style={styles.editIcon}
+            />
+          </TouchableOpacity>
         </Card>
 
         <View style={styles.section}>
@@ -239,16 +331,66 @@ export default function SettingsScreen() {
           </Card>
         </View>
 
-        <Button
-          mode="outlined"
+        <GradientButton
+          title="Logout"
           onPress={handleLogout}
+          variant="primary"
+          size="large"
           style={styles.logoutButton}
-          buttonColor="transparent"
-          textColor={theme.colors.error}
-        >
-          Logout
-        </Button>
+        />
       </ScrollView>
+
+      {/* Edit Name Modal */}
+      <Portal>
+        <Modal
+          visible={showEditNameModal}
+          onDismiss={handleCancelEdit}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Name</Text>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={handleCancelEdit}
+                />
+              </View>
+              
+              <Text style={styles.modalDescription}>
+                Update your display name
+              </Text>
+              
+              <TextInput
+                label="Name"
+                value={tempName}
+                onChangeText={setTempName}
+                mode="outlined"
+                style={styles.nameInput}
+                autoFocus
+                maxLength={50}
+              />
+              
+              <View style={styles.modalActions}>
+                <Button
+                  mode="outlined"
+                  onPress={handleCancelEdit}
+                  style={styles.modalButton}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleSaveName}
+                  style={styles.modalButton}
+                >
+                  Save
+                </Button>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 }

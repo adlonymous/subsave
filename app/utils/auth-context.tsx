@@ -9,6 +9,9 @@ interface UserInfo {
   name: string;
   email: string;
   picture?: string;
+  given_name?: string;
+  family_name?: string;
+  nickname?: string;
   [key: string]: any;
 }
 
@@ -19,6 +22,7 @@ interface AuthContextType {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
+  updateDisplayName: (name: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -72,7 +76,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw new Error('Failed to fetch user info');
     }
     
-    return response.json();
+    const userInfo = await response.json();
+    
+    // Debug: Log what Auth0 returns
+    console.log('Auth0 User Info:', userInfo);
+    
+    // Handle different Auth0 response formats
+    if (userInfo.name === userInfo.email || !userInfo.name || userInfo.name.trim() === '') {
+      // Try to get name from other fields first
+      if (userInfo.given_name && userInfo.family_name) {
+        userInfo.name = `${userInfo.given_name} ${userInfo.family_name}`;
+        console.log('Using given_name + family_name:', userInfo.name);
+      } else if (userInfo.given_name) {
+        userInfo.name = userInfo.given_name;
+        console.log('Using given_name:', userInfo.name);
+      } else if (userInfo.nickname) {
+        userInfo.name = userInfo.nickname;
+        console.log('Using nickname:', userInfo.name);
+      } else {
+        // Extract name from email as fallback
+        const emailName = userInfo.email.split('@')[0];
+        userInfo.name = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+        console.log('Extracted name from email:', userInfo.name);
+      }
+    }
+    
+    return userInfo;
   };
 
   const getStoredToken = async (): Promise<string | null> => {
@@ -166,6 +195,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return accessToken;
   };
 
+  const updateDisplayName = (name: string) => {
+    if (user) {
+      setUser({ ...user, name });
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -173,6 +208,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     getAccessToken,
+    updateDisplayName,
   };
 
   return (

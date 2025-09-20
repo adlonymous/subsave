@@ -1,116 +1,48 @@
 # SubSave - Subscription Management App
 
-A modern React Native app built with Expo, TypeScript, and React Native Paper for managing subscription services.
+## Problem
+- Subscriptions are a cash sink: you pay every month, nothing comes back.
+- Traditionally prepaying for subscriptions is inconvenient - merchants rarely offer it, and it locks you in.
+- Subscription tracker apps only monitor charges; they don’t reduce them.
+- Cancelling means chasing down each merchant individually.
+- Card overcharges or failed payments can disrupt services unexpectedly.
 
-## Features
+## What it does
+- You prepay for your monthly subscriptions for a year, and Subsave puts that money into a DeFi yield vault.
+- The vault generates yield, effectively making subscriptions cheaper over time.
+- You get the flexibility of monthly cancelation, even while committing funds up front.
+- This means you spend less than a yearly subscription without being locked in.
+- All blockchain complexity is abstracted away - users just see a simple dashboard and lower costs.
 
-- 🎨 **Modern UI**: Built with React Native Paper and Material Design 3
-- 🌙 **Dark/Light Theme**: Automatic theme switching with manual override
-- 📱 **Cross-Platform**: Works on iOS, Android, and Web
-- 🗂️ **Vault Management**: Organize subscriptions into vaults
-- 📊 **Dashboard**: Overview of all subscriptions and spending
-- 🔔 **Notifications**: Stay updated with billing reminders
-- ⚙️ **Settings**: Customize your app experience
+## How we built it
+- Frontend: Built with Expo + React Native Paper for a clean, mobile-first experience. The dashboard, vault detail, and notifications screens give users full visibility into balances and charges.
+- Authentication: Auth0 handles secure login and user identity management.
+- Database: MongoDB Atlas stores user profiles, subscription vaults, and payment history.
+- Blockchain under the hood: Subsave is designed to connect to DeFi vaults through Squads Grid SDK, which handles programmable accounts, spending caps, and automated payments.
+- AI: Google Gemini API is used to fetch subscription info for any service, recommend the best tier/plan, and optimize the prepay horizon.
+- Abstraction layer: All blockchain interactions are wrapped in simple service calls, so users only see their savings grow while the complexity stays hidden.
 
-## Screens
+## Challenges we ran into
+- Bridging TradFi and DeFi: Designing a system that feels like a regular finance app while actually running on blockchain rails was tricky. We had to abstract away the crypto concepts without losing their benefits.
+- Yield Simulation: In a hackathon setting, we simulated yield accrual to show savings over time, while keeping the path open for connecting to real protocols later.
+- Cancelation Flexibility: Giving users the ability to prepay yet still cancel monthly meant carefully modeling vault withdrawals and policy logic.
+- User Trust: Subscriptions touch sensitive financial data. Designing flows that feel transparent and secure was critical.
 
-- **Login**: Authentication screen with email/password
-- **Dashboard**: Main screen showing subscription vaults
-- **Vault Detail**: Detailed view of subscriptions in a vault
-- **Add Subscription**: Form to add new subscriptions
-- **Notifications**: Billing reminders and app notifications
-- **Settings**: Theme, notifications, and account settings
+## Accomplishments that we're proud of
+- Built a working mobile dashboard where users can add subscriptions, see balances, and track upcoming charges.
+- Designed a vault system that bridges prepaid funds with yield-generating accounts.
+- Created a flow where subscriptions are effectively cheaper without requiring merchants to change anything.
+- Made blockchain infrastructure invisible to the user, keeping the UX simple and approachable.
 
-## Tech Stack
+## What we learned
+- Users don’t care about the rails, they care about cheaper subscriptions and flexibility. Abstracting away DeFi concepts is the key to mainstream adoption.
+- Even small amounts of yield can create meaningful savings when paired with recurring payments.
+- Designing around trust and transparency is as important as the financial mechanics. Clear dashboards and notifications matter.
+- Hackathon speed forces clarity, we had to focus on the core loop: deposit -> yield -> automatic payments -> cancel anytime.
 
-- **Expo**: React Native development platform
-- **TypeScript**: Type-safe JavaScript
-- **Expo Router**: File-based routing
-- **React Native Paper**: Material Design components
-- **React Native Safe Area Context**: Safe area handling
-
-## Getting Started
-
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Start the development server:
-   ```bash
-   npm start
-   ```
-
-3. Run on specific platforms:
-   ```bash
-   npm run ios     # iOS simulator
-   npm run android # Android emulator
-   npm run web     # Web browser
-   ```
-
-## Project Structure
-
-```
-app/
-├── components/          # Reusable UI components
-│   ├── Button.tsx
-│   ├── Card.tsx
-│   ├── TextInput.tsx
-│   └── index.ts
-├── screens/            # Screen components
-├── utils/              # Utilities and theme
-│   ├── theme.ts
-│   └── theme-context.tsx
-├── types/              # TypeScript type definitions
-│   └── index.ts
-├── (tabs)/             # Tab navigation screens
-│   ├── dashboard.tsx
-│   ├── notifications.tsx
-│   ├── settings.tsx
-│   └── _layout.tsx
-├── _layout.tsx         # Root layout
-├── index.tsx           # Entry point
-├── login.tsx           # Login screen
-├── vaultDetail.tsx     # Vault detail screen
-└── addSubscription.tsx # Add subscription screen
-```
-
-## Components
-
-### Wrapper Components
-
-- **Button**: Customizable button with variants (primary, secondary, outlined, text)
-- **Card**: Flexible card component with different styles (elevated, outlined, filled)
-- **TextInput**: Enhanced text input with Material Design styling
-
-### Theme System
-
-The app supports both light and dark themes with automatic system detection:
-
-- **Light Theme**: Clean, bright interface
-- **Dark Theme**: Easy-on-eyes dark interface
-- **Auto Mode**: Follows system theme preference
-
-## Development
-
-The app uses Expo Router for navigation with file-based routing. Each screen is a separate file in the `app` directory, and the routing structure follows the file hierarchy.
-
-### Adding New Screens
-
-1. Create a new file in the appropriate directory
-2. Export a default React component
-3. The route will be automatically available based on the file path
-
-### Styling
-
-The app uses React Native Paper's theming system. Access the current theme using the `useTheme` hook:
-
-```typescript
-import { useTheme } from '@/utils/theme-context';
-
-const { theme, isDark, setThemeMode } = useTheme();
-```
-
-## License
-
-MIT License - see LICENSE file for details.
+## What's next for Subsave
+- Real DeFi integration: Plug into actual yield-generating protocols and stablecoin vaults.
+- Full Grid SDK support: Automated spending limits, programmable vaults, and virtual accounts.
+- Group vaults: Let families, roommates, or teams pool money for shared subscriptions.
+- AI insights: Smart nudges that recommend when to cancel unused subscriptions or prepay for better savings.
+- Beyond subscriptions: Extend the model to utilities, insurance, and memberships - any recurring expense.

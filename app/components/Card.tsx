@@ -18,15 +18,23 @@ export const Card: React.FC<CardProps> = ({
 
   const getCardStyle = () => {
     const baseStyle = {
-      borderRadius: 12,
+      borderRadius: 20,
       marginVertical: 4,
+      shadowColor: theme.colors.primary,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 4,
     };
 
     const paddingStyles = {
       none: { padding: 0 },
-      small: { padding: 8 },
-      medium: { padding: 16 },
-      large: { padding: 24 },
+      small: { padding: 12 },
+      medium: { padding: 20 },
+      large: { padding: 28 },
     };
 
     return [baseStyle, paddingStyles[padding], style];

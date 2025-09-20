@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Text, Title, Paragraph } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Button, Card } from '@/components';
+import { Button, Card, GradientButton, GradientCard } from '@/components';
 import { useTheme } from '@/utils/theme-context';
 import { useAuth } from '@/utils/auth-context';
 
@@ -35,6 +35,8 @@ export default function LoginScreen() {
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
+      paddingTop: 20,
+      paddingBottom: 20,
     },
     scrollView: {
       flex: 1,
@@ -101,16 +103,14 @@ export default function LoginScreen() {
             Sign in with your Auth0 account to access your subscription vaults
           </Paragraph>
 
-          <Button
-            mode="contained"
+          <GradientButton
+            title="Sign In with Auth0"
             onPress={handleLogin}
-            loading={loading}
             disabled={loading}
+            variant="primary"
+            size="large"
             style={styles.button}
-            icon="login"
-          >
-            Sign In with Auth0
-          </Button>
+          />
         </Card>
       </ScrollView>
     </View>

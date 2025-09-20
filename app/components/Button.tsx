@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button as PaperButton, ButtonProps as PaperButtonProps } from 'react-native-paper';
-import { useTheme } from '@/utils/theme-context';
+import { useTheme } from '../utils/theme-context';
 
 interface ButtonProps extends Omit<PaperButtonProps, 'theme'> {
   variant?: 'primary' | 'secondary' | 'outlined' | 'text';
@@ -20,13 +20,21 @@ export const Button: React.FC<ButtonProps> = ({
 
   const getButtonStyle = () => {
     const baseStyle = {
-      borderRadius: 8,
+      borderRadius: 16,
+      shadowColor: theme.colors.primary,
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 6,
     };
 
     const sizeStyles = {
-      small: { paddingVertical: 8, paddingHorizontal: 16 },
-      medium: { paddingVertical: 12, paddingHorizontal: 20 },
-      large: { paddingVertical: 16, paddingHorizontal: 24 },
+      small: { paddingVertical: 10, paddingHorizontal: 20 },
+      medium: { paddingVertical: 14, paddingHorizontal: 24 },
+      large: { paddingVertical: 18, paddingHorizontal: 32 },
     };
 
     return [baseStyle, sizeStyles[size], style];

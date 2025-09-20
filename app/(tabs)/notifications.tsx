@@ -115,6 +115,8 @@ export default function NotificationsScreen() {
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
+      paddingTop: 20,
+      paddingBottom: 20,
     },
     header: {
       padding: 24,
