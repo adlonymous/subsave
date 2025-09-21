@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, FlatList, RefreshControl, Alert, Modal, TouchableOpacity, Dimensions } from 'react-native';
-import { Text, Title, Paragraph, FAB, Chip, Appbar, Avatar, List, Divider, Card, IconButton, Portal } from 'react-native-paper';
+import { Text, Title, Paragraph, FAB, Chip, Appbar, Avatar, List, Divider, Card, IconButton, Portal, Icon, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 import { Button, GridAccountSetup, GradientCard, GradientButton } from '@/components';
 import { useTheme } from '@/utils/theme-context';
@@ -139,9 +139,13 @@ export default function DashboardScreen() {
   const [gridSetupChecked, setGridSetupChecked] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showWalletAddress, setShowWalletAddress] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [displayName, setDisplayName] = useState(user?.name || 'User');
   const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelStep, setCancelStep] = useState<'reason' | 'feedback' | 'confirm' | 'success'>('reason');
+  const [cancelReason, setCancelReason] = useState<string>('');
+  const [cancelFeedback, setCancelFeedback] = useState<string>('');
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => {
@@ -168,16 +172,21 @@ export default function DashboardScreen() {
 
   const handleDepositFromBank = () => {
     setShowDepositModal(false);
-    Alert.alert(
-      'Bank Deposit',
-      'Bank account deposit feature coming soon!',
-      [{ text: 'OK' }]
-    );
+    setShowPaymentModal(true);
   };
 
   const handleDepositFromWallet = () => {
     setShowDepositModal(false);
     setShowWalletAddress(true);
+  };
+
+  const handlePaymentMethodSelect = (method: string) => {
+    setShowPaymentModal(false);
+    Alert.alert(
+      'Payment Method Selected',
+      `${method} selected. Payment integration coming soon!`,
+      [{ text: 'OK' }]
+    );
   };
 
   const copyWalletAddress = async () => {
@@ -191,38 +200,55 @@ export default function DashboardScreen() {
 
   const handleSubscriptionPress = (subscription: Subscription) => {
     setSelectedSubscription(subscription);
+    setCancelStep('reason');
+    setCancelReason('');
+    setCancelFeedback('');
     setShowCancelModal(true);
   };
 
-  const handleCancelSubscription = () => {
+  const handleCancelReasonSelect = (reason: string) => {
+    setCancelReason(reason);
+    setCancelStep('feedback');
+  };
+
+  const handleCancelFeedbackSubmit = () => {
+    setCancelStep('confirm');
+  };
+
+  const handleCancelConfirm = () => {
     if (selectedSubscription) {
-      Alert.alert(
-        'Cancel Subscription',
-        `Are you sure you want to cancel your ${selectedSubscription.name} subscription?`,
-        [
-          {
-            text: 'Keep Subscription',
-            style: 'cancel',
-          },
-          {
-            text: 'Cancel Subscription',
-            style: 'destructive',
-            onPress: () => {
-              // Update the subscription to inactive
-              setSubscriptions(prev => 
-                prev.map(sub => 
-                  sub.id === selectedSubscription.id 
-                    ? { ...sub, isActive: false, status: 'cancelled' }
-                    : sub
-                )
-              );
-              setShowCancelModal(false);
-              setSelectedSubscription(null);
-              Alert.alert('Success', 'Subscription cancelled successfully');
-            },
-          },
-        ]
+      // Update the subscription to inactive
+      setSubscriptions(prev => 
+        prev.map(sub => 
+          sub.id === selectedSubscription.id 
+            ? { 
+                ...sub, 
+                isActive: false, 
+                status: 'cancelled',
+                cancelledAt: new Date().toISOString(),
+                cancelReason: cancelReason,
+                cancelFeedback: cancelFeedback
+              }
+            : sub
+        )
       );
+      setCancelStep('success');
+    }
+  };
+
+  const handleCancelComplete = () => {
+    setShowCancelModal(false);
+    setSelectedSubscription(null);
+    setCancelStep('reason');
+    setCancelReason('');
+    setCancelFeedback('');
+  };
+
+  const handleCancelBack = () => {
+    if (cancelStep === 'feedback') {
+      setCancelStep('reason');
+    } else if (cancelStep === 'confirm') {
+      setCancelStep('feedback');
     }
   };
 
@@ -664,6 +690,298 @@ export default function DashboardScreen() {
       color: theme.colors.error,
       textAlign: 'center',
     },
+    // Cancel Subscription Modal Styles
+    cancelModalCard: {
+      width: '100%',
+      maxWidth: 500,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 24,
+      padding: 0,
+      maxHeight: '90%',
+    },
+    cancelModalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 24,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.outline + '20',
+    },
+    cancelModalTitleContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    cancelBackButton: {
+      marginRight: 12,
+      padding: 4,
+    },
+    cancelModalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme.colors.onSurface,
+      flex: 1,
+    },
+    cancelStepIndicator: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      paddingBottom: 16,
+      gap: 8,
+    },
+    cancelStepDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    cancelModalContent: {
+      padding: 24,
+      paddingTop: 0,
+    },
+    // Reason Step Styles
+    cancelReasonStep: {
+      gap: 20,
+    },
+    cancelStepDescription: {
+      fontSize: 16,
+      lineHeight: 24,
+      textAlign: 'center',
+    },
+    cancelReasonOptions: {
+      gap: 12,
+    },
+    cancelReasonOption: {
+      padding: 16,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    cancelReasonText: {
+      fontSize: 16,
+      fontWeight: '500',
+      textAlign: 'center',
+    },
+    // Feedback Step Styles
+    cancelFeedbackStep: {
+      gap: 16,
+    },
+    cancelFeedbackInput: {
+      minHeight: 100,
+      textAlignVertical: 'top',
+    },
+    cancelStepNote: {
+      fontSize: 14,
+      textAlign: 'center',
+      fontStyle: 'italic',
+    },
+    // Confirm Step Styles
+    cancelConfirmStep: {
+      alignItems: 'center',
+      gap: 20,
+    },
+    cancelConfirmIcon: {
+      marginBottom: 8,
+    },
+    cancelConfirmTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    cancelConfirmDescription: {
+      fontSize: 16,
+      textAlign: 'center',
+      lineHeight: 24,
+    },
+    cancelConfirmDetails: {
+      width: '100%',
+      backgroundColor: theme.colors.surfaceVariant,
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
+    },
+    cancelConfirmRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+    },
+    cancelConfirmLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      flex: 1,
+    },
+    cancelConfirmValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      textAlign: 'right',
+      flex: 1,
+    },
+    cancelWarningBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: theme.colors.primaryContainer,
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
+    },
+    cancelWarningText: {
+      fontSize: 14,
+      lineHeight: 20,
+      flex: 1,
+    },
+    // Success Step Styles
+    cancelSuccessStep: {
+      alignItems: 'center',
+      gap: 20,
+    },
+    cancelSuccessIcon: {
+      marginBottom: 8,
+    },
+    cancelSuccessTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    cancelSuccessDescription: {
+      fontSize: 16,
+      textAlign: 'center',
+      lineHeight: 24,
+    },
+    cancelSuccessDetails: {
+      width: '100%',
+      backgroundColor: theme.colors.surfaceVariant,
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
+    },
+    cancelSuccessRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    cancelSuccessLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      flex: 1,
+    },
+    cancelSuccessValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      textAlign: 'right',
+      flex: 1,
+    },
+    cancelSuccessNote: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.primaryContainer,
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
+    },
+    cancelSuccessNoteText: {
+      fontSize: 14,
+      lineHeight: 20,
+      flex: 1,
+    },
+    // Actions Styles
+    cancelModalActions: {
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      paddingBottom: 24,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.outline + '20',
+    },
+    cancelActionButton: {
+      flex: 1,
+    },
+    cancelFeedbackActions: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    cancelConfirmActions: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    // Payment Modal Styles
+    paymentModalCard: {
+      width: '100%',
+      maxWidth: 500,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 24,
+      padding: 0,
+      maxHeight: '90%',
+    },
+    paymentModalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 24,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.outline + '20',
+    },
+    paymentModalTitle: {
+      fontSize: 24,
+      fontWeight: '700',
+      color: theme.colors.onSurface,
+    },
+    paymentOptionsContainer: {
+      padding: 24,
+      gap: 12,
+    },
+    paymentOptionCard: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surfaceVariant,
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.outline + '20',
+    },
+    paymentOptionLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    paymentOptionIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: theme.colors.primaryContainer,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 16,
+      position: 'relative',
+    },
+    lightningIcon: {
+      position: 'absolute',
+      top: -2,
+      right: -2,
+    },
+    paymentOptionText: {
+      flex: 1,
+    },
+    recommendedBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      marginBottom: 4,
+      alignSelf: 'flex-start',
+    },
+    recommendedText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: theme.colors.onPrimary,
+      letterSpacing: 0.5,
+    },
+    paymentOptionTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.onSurface,
+    },
   });
 
   // Show Grid setup if needed
@@ -872,40 +1190,367 @@ export default function DashboardScreen() {
         </Modal>
       </Portal>
 
+      {/* Payment Method Modal */}
+      <Portal>
+        <Modal
+          visible={showPaymentModal}
+          onDismiss={() => setShowPaymentModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.paymentModalCard}>
+              <View style={styles.paymentModalHeader}>
+                <Text style={styles.paymentModalTitle}>Payment method</Text>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowPaymentModal(false)}
+                />
+              </View>
+              
+              <View style={styles.paymentOptionsContainer}>
+                {/* Instant Bank Transfer - Recommended */}
+                <TouchableOpacity 
+                  style={styles.paymentOptionCard}
+                  onPress={() => handlePaymentMethodSelect('Instant Bank Transfer')}
+                >
+                  <View style={styles.paymentOptionLeft}>
+                    <View style={styles.paymentOptionIcon}>
+                      <Icon name="bank" size={24} color={theme.colors.primary} />
+                      <Icon name="lightning-bolt" size={16} color={theme.colors.primary} style={styles.lightningIcon} />
+                    </View>
+                    <View style={styles.paymentOptionText}>
+                      <View style={styles.recommendedBadge}>
+                        <Text style={styles.recommendedText}>RECOMMENDED</Text>
+                      </View>
+                      <Text style={styles.paymentOptionTitle}>Instant Bank Transfer</Text>
+                    </View>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.colors.outline} />
+                </TouchableOpacity>
+
+                {/* Credit or Debit */}
+                <TouchableOpacity 
+                  style={styles.paymentOptionCard}
+                  onPress={() => handlePaymentMethodSelect('Credit or Debit')}
+                >
+                  <View style={styles.paymentOptionLeft}>
+                    <View style={styles.paymentOptionIcon}>
+                      <Icon name="credit-card" size={24} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.paymentOptionText}>
+                      <Text style={styles.paymentOptionTitle}>Credit or Debit</Text>
+                    </View>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.colors.outline} />
+                </TouchableOpacity>
+
+                {/* Apple Pay */}
+                <TouchableOpacity 
+                  style={styles.paymentOptionCard}
+                  onPress={() => handlePaymentMethodSelect('Apple Pay')}
+                >
+                  <View style={styles.paymentOptionLeft}>
+                    <View style={styles.paymentOptionIcon}>
+                      <Icon name="apple" size={24} color={theme.colors.onSurface} />
+                    </View>
+                    <View style={styles.paymentOptionText}>
+                      <Text style={styles.paymentOptionTitle}>Apple Pay</Text>
+                    </View>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.colors.outline} />
+                </TouchableOpacity>
+
+                {/* Google Pay */}
+                <TouchableOpacity 
+                  style={styles.paymentOptionCard}
+                  onPress={() => handlePaymentMethodSelect('Google Pay')}
+                >
+                  <View style={styles.paymentOptionLeft}>
+                    <View style={styles.paymentOptionIcon}>
+                      <Icon name="google" size={24} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.paymentOptionText}>
+                      <Text style={styles.paymentOptionTitle}>Google Pay</Text>
+                    </View>
+                  </View>
+                  <Icon name="chevron-right" size={20} color={theme.colors.outline} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
+
       {/* Cancel Subscription Modal */}
       <Portal>
         <Modal
           visible={showCancelModal}
-          onDismiss={() => setShowCancelModal(false)}
+          onDismiss={handleCancelComplete}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Cancel Subscription</Text>
+            <View style={styles.cancelModalCard}>
+              {/* Header */}
+              <View style={styles.cancelModalHeader}>
+                <View style={styles.cancelModalTitleContainer}>
+                  {cancelStep !== 'reason' && (
+                    <TouchableOpacity 
+                      onPress={handleCancelBack}
+                      style={styles.cancelBackButton}
+                    >
+                      <Icon name="arrow-left" size={24} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                  )}
+                  <Text style={styles.cancelModalTitle}>
+                    {cancelStep === 'reason' && 'Why are you cancelling?'}
+                    {cancelStep === 'feedback' && 'Tell us more'}
+                    {cancelStep === 'confirm' && 'Confirm Cancellation'}
+                    {cancelStep === 'success' && 'Subscription Cancelled'}
+                  </Text>
+                </View>
                 <IconButton
                   icon="close"
                   size={24}
-                  onPress={() => setShowCancelModal(false)}
+                  onPress={handleCancelComplete}
                 />
               </View>
-              <Text style={styles.modalDescription}>
-                Are you sure you want to cancel this subscription? This action cannot be undone.
-              </Text>
-              <View style={styles.modalActions}>
-                <GradientButton
-                  title="Keep Subscription"
-                  onPress={() => setShowCancelModal(false)}
-                  variant="secondary"
-                  size="medium"
-                  style={styles.modalButton}
-                />
-                <GradientButton
-                  title="Cancel Subscription"
-                  onPress={handleCancelSubscription}
-                  variant="primary"
-                  size="medium"
-                  style={[styles.modalButton, { backgroundColor: theme.colors.error }]}
-                />
+
+              {/* Step Indicator */}
+              <View style={styles.cancelStepIndicator}>
+                {['reason', 'feedback', 'confirm', 'success'].map((step, index) => (
+                  <View
+                    key={step}
+                    style={[
+                      styles.cancelStepDot,
+                      {
+                        backgroundColor: 
+                          ['reason', 'feedback', 'confirm', 'success'].indexOf(cancelStep) >= index
+                            ? theme.colors.primary
+                            : theme.colors.outline
+                      }
+                    ]}
+                  />
+                ))}
+              </View>
+
+              {/* Content */}
+              <View style={styles.cancelModalContent}>
+                {cancelStep === 'reason' && (
+                  <View style={styles.cancelReasonStep}>
+                    <Text style={[styles.cancelStepDescription, { color: theme.colors.onSurfaceVariant }]}>
+                      Help us understand why you're cancelling {selectedSubscription?.name}
+                    </Text>
+                    <View style={styles.cancelReasonOptions}>
+                      {[
+                        'Too expensive',
+                        'Not using it enough',
+                        'Found a better alternative',
+                        'Technical issues',
+                        'Customer service problems',
+                        'No longer needed',
+                        'Other'
+                      ].map((reason) => (
+                        <TouchableOpacity
+                          key={reason}
+                          style={[
+                            styles.cancelReasonOption,
+                            {
+                              backgroundColor: cancelReason === reason 
+                                ? theme.colors.primaryContainer 
+                                : theme.colors.surface,
+                              borderColor: cancelReason === reason 
+                                ? theme.colors.primary 
+                                : theme.colors.outline,
+                            }
+                          ]}
+                          onPress={() => handleCancelReasonSelect(reason)}
+                        >
+                          <Text
+                            style={[
+                              styles.cancelReasonText,
+                              {
+                                color: cancelReason === reason 
+                                  ? theme.colors.primary 
+                                  : theme.colors.onSurface,
+                              }
+                            ]}
+                          >
+                            {reason}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {cancelStep === 'feedback' && (
+                  <View style={styles.cancelFeedbackStep}>
+                    <Text style={[styles.cancelStepDescription, { color: theme.colors.onSurfaceVariant }]}>
+                      Any additional feedback? (Optional)
+                    </Text>
+                    <TextInput
+                      mode="outlined"
+                      value={cancelFeedback}
+                      onChangeText={setCancelFeedback}
+                      placeholder="Tell us what we could improve..."
+                      multiline
+                      numberOfLines={4}
+                      style={styles.cancelFeedbackInput}
+                      outlineColor={theme.colors.outline}
+                      activeOutlineColor={theme.colors.primary}
+                    />
+                    <Text style={[styles.cancelStepNote, { color: theme.colors.onSurfaceVariant }]}>
+                      Your feedback helps us improve our service
+                    </Text>
+                  </View>
+                )}
+
+                {cancelStep === 'confirm' && (
+                  <View style={styles.cancelConfirmStep}>
+                    <View style={styles.cancelConfirmIcon}>
+                      <Icon name="alert-circle" size={48} color={theme.colors.error} />
+                    </View>
+                    <Text style={[styles.cancelConfirmTitle, { color: theme.colors.onSurface }]}>
+                      Are you sure?
+                    </Text>
+                    <Text style={[styles.cancelConfirmDescription, { color: theme.colors.onSurfaceVariant }]}>
+                      You're about to cancel your {selectedSubscription?.name} subscription.
+                    </Text>
+                    
+                    <View style={styles.cancelConfirmDetails}>
+                      <View style={styles.cancelConfirmRow}>
+                        <Text style={[styles.cancelConfirmLabel, { color: theme.colors.onSurfaceVariant }]}>
+                          Reason:
+                        </Text>
+                        <Text style={[styles.cancelConfirmValue, { color: theme.colors.onSurface }]}>
+                          {cancelReason}
+                        </Text>
+                      </View>
+                      {cancelFeedback && (
+                        <View style={styles.cancelConfirmRow}>
+                          <Text style={[styles.cancelConfirmLabel, { color: theme.colors.onSurfaceVariant }]}>
+                            Feedback:
+                          </Text>
+                          <Text style={[styles.cancelConfirmValue, { color: theme.colors.onSurface }]}>
+                            {cancelFeedback}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.cancelWarningBox}>
+                      <Icon name="information" size={20} color={theme.colors.primary} />
+                      <Text style={[styles.cancelWarningText, { color: theme.colors.onSurfaceVariant }]}>
+                        This action cannot be undone. You'll lose access to all premium features.
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {cancelStep === 'success' && (
+                  <View style={styles.cancelSuccessStep}>
+                    <View style={styles.cancelSuccessIcon}>
+                      <Icon name="check-circle" size={64} color={theme.colors.primary} />
+                    </View>
+                    <Text style={[styles.cancelSuccessTitle, { color: theme.colors.onSurface }]}>
+                      Subscription Cancelled
+                    </Text>
+                    <Text style={[styles.cancelSuccessDescription, { color: theme.colors.onSurfaceVariant }]}>
+                      Your {selectedSubscription?.name} subscription has been successfully cancelled.
+                    </Text>
+                    
+                    <View style={styles.cancelSuccessDetails}>
+                      <View style={styles.cancelSuccessRow}>
+                        <Text style={[styles.cancelSuccessLabel, { color: theme.colors.onSurfaceVariant }]}>
+                          Cancelled on:
+                        </Text>
+                        <Text style={[styles.cancelSuccessValue, { color: theme.colors.onSurface }]}>
+                          {new Date().toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </Text>
+                      </View>
+                      <View style={styles.cancelSuccessRow}>
+                        <Text style={[styles.cancelSuccessLabel, { color: theme.colors.onSurfaceVariant }]}>
+                          Access until:
+                        </Text>
+                        <Text style={[styles.cancelSuccessValue, { color: theme.colors.onSurface }]}>
+                          {selectedSubscription?.nextBillingDate || 'End of current period'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.cancelSuccessNote}>
+                      <Icon name="information" size={16} color={theme.colors.primary} />
+                      <Text style={[styles.cancelSuccessNoteText, { color: theme.colors.onSurfaceVariant }]}>
+                        You can reactivate anytime from your dashboard
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Actions */}
+              <View style={styles.cancelModalActions}>
+                {cancelStep === 'reason' && (
+                  <GradientButton
+                    title="Continue"
+                    onPress={() => setCancelStep('feedback')}
+                    variant="primary"
+                    size="large"
+                    disabled={!cancelReason}
+                    style={styles.cancelActionButton}
+                  />
+                )}
+
+                {cancelStep === 'feedback' && (
+                  <View style={styles.cancelFeedbackActions}>
+                    <GradientButton
+                      title="Skip"
+                      onPress={handleCancelFeedbackSubmit}
+                      variant="secondary"
+                      size="medium"
+                      style={styles.cancelActionButton}
+                    />
+                    <GradientButton
+                      title="Continue"
+                      onPress={handleCancelFeedbackSubmit}
+                      variant="primary"
+                      size="medium"
+                      style={styles.cancelActionButton}
+                    />
+                  </View>
+                )}
+
+                {cancelStep === 'confirm' && (
+                  <View style={styles.cancelConfirmActions}>
+                    <GradientButton
+                      title="Keep Subscription"
+                      onPress={handleCancelComplete}
+                      variant="secondary"
+                      size="medium"
+                      style={styles.cancelActionButton}
+                    />
+                    <GradientButton
+                      title="Cancel Subscription"
+                      onPress={handleCancelConfirm}
+                      variant="primary"
+                      size="medium"
+                      style={[styles.cancelActionButton, { backgroundColor: theme.colors.error }]}
+                    />
+                  </View>
+                )}
+
+                {cancelStep === 'success' && (
+                  <GradientButton
+                    title="Done"
+                    onPress={handleCancelComplete}
+                    variant="primary"
+                    size="large"
+                    style={styles.cancelActionButton}
+                  />
+                )}
               </View>
             </View>
           </View>

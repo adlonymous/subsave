@@ -25,7 +25,7 @@ interface Step {
   key: string;
   title: string;
   placeholder: string;
-  type: 'text' | 'ai-analysis' | 'amount-selection' | 'select' | 'date' | 'amount' | 'payment-card';
+  type: 'text' | 'ai-analysis' | 'amount-selection' | 'select' | 'date' | 'amount' | 'savings-calculation' | 'payment-card';
   keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad';
   options?: string[];
   currencyOptions?: string[];
@@ -56,6 +56,12 @@ const steps: Step[] = [
     placeholder: 'e.g., Entertainment, Software, Productivity',
     type: 'select',
     options: ['Entertainment', 'Software', 'Productivity', 'Music', 'Gaming', 'News', 'Fitness', 'Education', 'Other']
+  },
+  { 
+    key: 'savingsCalculation', 
+    title: 'Your Savings with Prepayment', 
+    placeholder: 'See how much you can save by prepaying',
+    type: 'savings-calculation'
   },
   { 
     key: 'paymentCard', 
@@ -261,9 +267,88 @@ I've pre-selected the recommended option for you. Ready to continue?`;
     setFormData(prev => ({ ...prev, [key]: value }));
   };
 
+  // Calculate savings for prepayment
+  const calculateSavings = () => {
+    const currentAmount = parseFloat(formData.amount);
+    const currentCycle = formData.billingCycle;
+    
+    if (!currentAmount || !currentCycle) return null;
+    
+    // Calculate annual cost for current selection
+    let annualCost = 0;
+    switch (currentCycle) {
+      case 'monthly':
+        annualCost = currentAmount * 12;
+        break;
+      case 'quarterly':
+        annualCost = currentAmount * 4;
+        break;
+      case 'yearly':
+        annualCost = currentAmount;
+        break;
+    }
+    
+    // Calculate what monthly would cost annually (always compare to monthly)
+    const monthlyAnnualCost = currentAmount * 12;
+    
+    // Calculate direct savings from prepayment discounts
+    const directSavings = monthlyAnnualCost - annualCost;
+    const directSavingsPercentage = monthlyAnnualCost > 0 ? (directSavings / monthlyAnnualCost) * 100 : 0;
+    
+    // Calculate vault yield benefit (7% APY on prepaid amount)
+    // For yearly prepayment, the money sits in vault for average 6 months
+    // For quarterly prepayment, the money sits in vault for average 1.5 months
+    // For monthly, show what they'd save if they prepaid yearly instead
+    let averageVaultTime = 0;
+    let vaultYieldBenefit = 0;
+    
+    if (currentCycle === 'monthly') {
+      // Show potential savings if they switched to yearly prepayment
+      const yearlyCost = currentAmount * 12; // What yearly would cost
+      averageVaultTime = 6; // 6 months average for yearly prepayment
+      vaultYieldBenefit = yearlyCost * (0.07 * averageVaultTime / 12);
+    } else {
+      // Current selection is already prepaid
+      switch (currentCycle) {
+        case 'yearly':
+          averageVaultTime = 6; // 6 months average
+          break;
+        case 'quarterly':
+          averageVaultTime = 1.5; // 1.5 months average
+          break;
+      }
+      vaultYieldBenefit = annualCost * (0.07 * averageVaultTime / 12);
+    }
+    
+    // Total savings = direct savings + vault yield benefit
+    const totalSavings = directSavings + vaultYieldBenefit;
+    const totalSavingsPercentage = monthlyAnnualCost > 0 ? (totalSavings / monthlyAnnualCost) * 100 : 0;
+    
+    // Effective cost = annual cost - vault yield benefit
+    const effectiveCost = annualCost - vaultYieldBenefit;
+    
+    return {
+      annualCost,
+      monthlyAnnualCost,
+      directSavings,
+      directSavingsPercentage,
+      vaultYieldBenefit,
+      totalSavings,
+      totalSavingsPercentage,
+      effectiveCost,
+      currentCycle,
+      averageVaultTime
+    };
+  };
+
   const isStepValid = () => {
     // AI analysis step is always valid (it's auto-analyzed)
     if (currentStepData.key === 'ai-analysis') {
+      return true;
+    }
+    
+    // Savings calculation step is always valid (it's calculated)
+    if (currentStepData.type === 'savings-calculation') {
       return true;
     }
     
@@ -318,9 +403,8 @@ I've pre-selected the recommended option for you. Ready to continue?`;
       paddingBottom: 20,
     },
     content: {
-      flex: 1,
       padding: 24,
-      justifyContent: 'center',
+      paddingBottom: 100, // Extra padding for better scroll
     },
     headerContainer: {
       flexDirection: 'row',
@@ -806,6 +890,63 @@ I've pre-selected the recommended option for you. Ready to continue?`;
     confirmationButton: {
       flex: 1,
     },
+    // Savings Calculation Styles
+    savingsContainer: {
+      width: '100%',
+    },
+    savingsContent: {
+      gap: 16,
+    },
+    savingsCard: {
+      padding: 20,
+      borderRadius: 16,
+      marginBottom: 8,
+    },
+    savingsTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      marginBottom: 12,
+    },
+    savingsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    savingsLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      flex: 1,
+    },
+    savingsValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      textAlign: 'right',
+      flex: 1,
+    },
+    savingsHighlight: {
+      alignItems: 'center',
+      marginVertical: 12,
+    },
+    savingsAmount: {
+      fontSize: 32,
+      fontWeight: '800',
+      marginBottom: 4,
+    },
+    savingsPercentage: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    savingsDescription: {
+      fontSize: 14,
+      lineHeight: 20,
+      textAlign: 'center',
+    },
+    savingsError: {
+      fontSize: 16,
+      textAlign: 'center',
+      fontStyle: 'italic',
+    },
   });
 
   return (
@@ -1081,6 +1222,152 @@ I've pre-selected the recommended option for you. Ready to continue?`;
                   </Text>
                 </TouchableOpacity>
               ))}
+            </View>
+          ) : currentStepData.type === 'savings-calculation' ? (
+            <View style={styles.savingsContainer}>
+              {(() => {
+                const savings = calculateSavings();
+                if (!savings) {
+                  return (
+                    <Card style={[styles.savingsCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                      <Text style={[styles.savingsError, { color: theme.colors.onSurfaceVariant }]}>
+                        Unable to calculate savings. Please check your amount and billing cycle.
+                      </Text>
+                    </Card>
+                  );
+                }
+
+                const isMonthly = savings.currentCycle === 'monthly';
+                const hasDirectSavings = savings.directSavings > 0;
+                const hasVaultBenefit = savings.vaultYieldBenefit > 0;
+                const hasTotalSavings = savings.totalSavings > 0;
+
+                return (
+                  <View style={styles.savingsContent}>
+                    {/* Current Selection Summary */}
+                    <Card style={[styles.savingsCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                      <Text style={[styles.savingsTitle, { color: theme.colors.onSurface }]}>
+                        Your Selection
+                      </Text>
+                      <View style={styles.savingsRow}>
+                        <Text style={[styles.savingsLabel, { color: theme.colors.onSurfaceVariant }]}>
+                          Billing Cycle:
+                        </Text>
+                        <Text style={[styles.savingsValue, { color: theme.colors.onSurface }]}>
+                          {savings.currentCycle.charAt(0).toUpperCase() + savings.currentCycle.slice(1)}
+                        </Text>
+                      </View>
+                      <View style={styles.savingsRow}>
+                        <Text style={[styles.savingsLabel, { color: theme.colors.onSurfaceVariant }]}>
+                          Annual Cost:
+                        </Text>
+                        <Text style={[styles.savingsValue, { color: theme.colors.onSurface }]}>
+                          ${savings.annualCost.toFixed(2)} {formData.currency}
+                        </Text>
+                      </View>
+                    </Card>
+
+                    {/* Savings Analysis */}
+                    {hasTotalSavings ? (
+                      <Card style={[styles.savingsCard, { backgroundColor: theme.colors.primaryContainer }]}>
+                        <Text style={[styles.savingsTitle, { color: theme.colors.primary }]}>
+                          💰 You're Saving Money!
+                        </Text>
+                        <View style={styles.savingsHighlight}>
+                          <Text style={[styles.savingsAmount, { color: theme.colors.primary }]}>
+                            ${savings.totalSavings.toFixed(2)} {formData.currency}
+                          </Text>
+                          <Text style={[styles.savingsPercentage, { color: theme.colors.primary }]}>
+                            ({savings.totalSavingsPercentage.toFixed(1)}% off)
+                          </Text>
+                        </View>
+                        <Text style={[styles.savingsDescription, { color: theme.colors.onPrimaryContainer }]}>
+                          Compared to monthly billing at ${savings.monthlyAnnualCost.toFixed(2)}/year
+                        </Text>
+                      </Card>
+                    ) : (
+                      <Card style={[styles.savingsCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <Text style={[styles.savingsTitle, { color: theme.colors.onSurface }]}>
+                          📊 No Direct Savings
+                        </Text>
+                        <Text style={[styles.savingsDescription, { color: theme.colors.onSurfaceVariant }]}>
+                          {isMonthly 
+                            ? "No prepayment discounts available, but you can still benefit from vault yield by prepaying."
+                            : "This service doesn't offer prepayment discounts."
+                          }
+                        </Text>
+                      </Card>
+                    )}
+
+                    {/* Vault Yield Analysis */}
+                    {hasVaultBenefit && (
+                      <Card style={[styles.savingsCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <Text style={[styles.savingsTitle, { color: theme.colors.onSurface }]}>
+                          🏦 Vault Yield Benefit
+                        </Text>
+                        <View style={styles.savingsRow}>
+                          <Text style={[styles.savingsLabel, { color: theme.colors.onSurfaceVariant }]}>
+                            Vault Yield (7% APY):
+                          </Text>
+                          <Text style={[styles.savingsValue, { color: theme.colors.primary }]}>
+                            +${savings.vaultYieldBenefit.toFixed(2)} {formData.currency}
+                          </Text>
+                        </View>
+                        <View style={styles.savingsRow}>
+                          <Text style={[styles.savingsLabel, { color: theme.colors.onSurfaceVariant }]}>
+                            Average Vault Time:
+                          </Text>
+                          <Text style={[styles.savingsValue, { color: theme.colors.onSurface }]}>
+                            {savings.averageVaultTime} months
+                          </Text>
+                        </View>
+                        <View style={styles.savingsRow}>
+                          <Text style={[styles.savingsLabel, { color: theme.colors.onSurfaceVariant }]}>
+                            Effective Cost:
+                          </Text>
+                          <Text style={[styles.savingsValue, { color: theme.colors.primary }]}>
+                            ${savings.effectiveCost.toFixed(2)} {formData.currency}
+                          </Text>
+                        </View>
+                        <Text style={[styles.savingsDescription, { color: theme.colors.onSurfaceVariant }]}>
+                          {isMonthly 
+                            ? "💡 If you prepaid yearly, your money would earn yield in the vault, reducing your effective subscription cost!"
+                            : "💡 Your prepaid amount earns yield in the vault, reducing your effective subscription cost!"
+                          }
+                        </Text>
+                      </Card>
+                    )}
+
+                    {/* Recommendation */}
+                    <Card style={[
+                      styles.savingsCard, 
+                      { 
+                        backgroundColor: hasTotalSavings 
+                          ? theme.colors.primaryContainer 
+                          : theme.colors.surfaceVariant 
+                      }
+                    ]}>
+                      <Text style={[
+                        styles.savingsTitle, 
+                        { color: hasTotalSavings ? theme.colors.primary : theme.colors.onSurface }
+                      ]}>
+                        {hasTotalSavings ? '🎯 Recommended: Prepay!' : (isMonthly ? '💡 Consider Prepaying Yearly!' : '💡 Consider Monthly Billing')}
+                      </Text>
+                      <Text style={[
+                        styles.savingsDescription, 
+                        { color: hasTotalSavings ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant }
+                      ]}>
+                        {hasTotalSavings 
+                          ? `You'll save ${savings.totalSavings.toFixed(2)} {formData.currency} annually through prepayment discounts and vault yield!`
+                          : isMonthly 
+                            ? `You could save ${savings.totalSavings.toFixed(2)} {formData.currency} annually by prepaying yearly and earning vault yield!`
+                            : "Monthly billing would let you earn more through your vault's 7% APY."
+                        }
+                      </Text>
+                    </Card>
+                  </View>
+                );
+              })()}
             </View>
           ) : currentStepData.type === 'payment-card' ? (
             <View style={styles.paymentCardContainer}>
